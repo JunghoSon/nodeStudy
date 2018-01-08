@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>파일 업로드 테스트</title>
+</head>
+<body>
+<h1>파일 업로드</h1>
+<br />
+<form method="post" action="/process/photo" enctype="multipart/form-data">
+    <fieldset>
+    <legned>파일 업로드 양식</legned>
+    <table>
+        <caption>파일을 업로드해 주세요.</caption>
+        <tbody>
+        <tr>
+            <th scope="row"><label for="uphoto">파일</label></th>
+            <td><input type="file" multiple="multiple" id="uphoto" name="uphoto" /></td>
+        </tr>
+        </tbody>
+    </table>
+    <input type="submit" value="업로드" />
+    </fieldset>
+</form>
+</body>
+</html>
