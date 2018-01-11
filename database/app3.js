@@ -4,12 +4,14 @@ var bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
 var expressSession = require('express-session');
 var expressErrorHandler = require('express-error-handler');
-var mongodb = require('mongodb');
+var mongoose = require('mongoose');
 
 var app = express();
 var router = express.Router();
 
 var database;
+var UserSchema;
+var UserModel;
 
 app.set('port', process.env.PORT || 8083);
 
@@ -89,6 +91,36 @@ router.post('/process/addUser', function(req, res){
     }
 });
 
+router.post('/process/listUser', function(req, res){
+    console.log('/process/listUser 호출됨.');
+
+    if(database){
+        UserModel.findAll(function(err, results){
+            if(err) throw err;
+
+            if(results){
+                console.dir(results);
+
+                res.writeHead(200, {'Content-Type': 'text/html;charset=utf8'});
+                res.write('<ul>');
+
+                for(var i=0; i< results.length; i++){
+                    res.write('<li>');
+                    res.write('#' + i + ' : ' + results[i]._doc.id + ' / ' + results[i]._doc.name);
+                    res.write('</li>');
+                }
+
+                res.write('</ul>');
+                res.end();
+            }else{
+                res.writeHead(200, {'Content-Type': 'text/html;charset=utf8'});
+                res.write('<h1>사용자 리스트 조회 실패</h1>');
+                res.end();
+            }
+        });
+    }
+});
+
 app.use('/', router);
 
 var errorHandler = expressErrorHandler({
@@ -101,52 +133,86 @@ app.use(expressErrorHandler.httpError(404));
 app.use(errorHandler);
 
 function connectDB(){
-    var databaseURL = 'mongodb://localhost:27017';
+    var databaseURL = 'mongodb://localhost:27017/shopping';
 
-    mongodb.MongoClient.connect(databaseURL, function(err, client){
-        if(err) throw err;
+    mongoose.connect(databaseURL);
+    database = mongoose.connection;
 
+    database.on('error', console.error.bind(console, 'mongoose connection error.'));
+
+    database.on('open', function(){
         console.log('데이터베이스에 연결되었습니다 : %s', databaseURL);
 
-        database = client.db('shopping');
+        UserSchema = mongoose.Schema({
+            id: {type: String, required: true, unique: true},
+            password: {type: String, required: true},
+            name: {type: String, index: 'hashed'},
+            age: {type: Number, default: -1},
+            created_at: {type: Date, index: {unique: false, expired: '1d'}},
+            updated_at: Date
+        });
+
+        UserSchema.static('findById', function(id, callback){
+            return this.find({id: id}, callback);
+        });
+
+        UserSchema.static('findAll', function(callback){
+            return this.find({}, callback);
+        });
+
+        UserModel = mongoose.model('users2', UserSchema);
+        console.log('users2 정의함.');
     });
+
+    database.on('disconnected', connectDB);
 }
 
 var authUser = function(database, id, pw, callback){
     console.log('authUser 호출됨.');
 
-    var users = database.collection('users');
-
-    users.find({id: id, password: pw}).toArray(function(err, docs){
+    UserModel.findById(id, function(err, results){
         if(err){
             callback(err, null);
             return;
         }
 
-        if(docs.length > 0){
-            console.log('아이디 [%s], 비밀번호 [%s]와 일치하는 사용자를 찾음', id, pw);
-            callback(null, docs);
+        console.log('아이디 [%s]로 사용자 검색 결과', id);
+        console.dir(results);
+
+        if(results.length > 0) {
+            console.log('아이디 일치하는 사용자를 찾음');
+
+            if(results[0]._doc.password === pw){
+                console.log('비밀번호가 일치함');
+                callback(null, results);
+            }else{
+                console.log('비밀번호가 일치하지 않음');
+                callback(null, null);
+            }
         }else{
             console.log('일치하는 사용자를 찾지 못함');
             callback(null, null);
         }
-
     });
 };
 
 var addUser = function(database, id, pw, name, callback){
     console.log('addhUser 호출됨.');
 
-    var users = database.collection('users');
+    var user = new UserModel({
+        id: id,
+        password: pw,
+        name: name
+    });
 
-    users.insert({id: id, password: pw, name: name}, function(err, result){
+    user.save(function(err){
         if(err){
             callback(err, null);
             return;
         }
 
         console.log('사용자 데이터 추가함');
-        callback(null, result);
+        callback(null, user);
     });
 };
 
